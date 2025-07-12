@@ -6,10 +6,14 @@ NetAn, hem Linux hem de Windows işletim sistemlerinde temel ağ teşhisleri sa�
 
 NetAn şu anda aşağıdaki komutları desteklemektedir:
 
-*   **`ping <ana bilgisayar> [port]`**: Belirtilen bir ana bilgisayar ve porta (varsayılan olarak 80) TCP tabanlı bir gecikme kontrolü yapar. Bu, özel ayrıcalıklar gerektirmeden ağ yanıt hızını ölçmek için kullanışlıdır.
+*   **`ping <ana bilgisayar>`**: Belirtilen bir ana bilgisayara ICMP tabanlı bir ping yapar, gecikme (min/ort/maks), paket kaybı ve jitter dahil olmak üzere ayrıntılı istatistikler sağlar. Bu komut yükseltilmiş ayrıcalıklar (root/Yönetici) gerektirir.
     ```bash
+    # Linux'ta (bir kez 'sudo setcap cap_net_raw+ep ./build/netan' çalıştırdıktan sonra):
     ./netan ping google.com
-    ./netan ping ornek.com 443
+    # Linux'ta (setcap kullanılmazsa veya tek çalıştırma için):
+    sudo ./netan ping google.com
+    # Windows'ta (Komut İstemi/PowerShell'i Yönetici olarak çalıştırın):
+    .\netan.exe ping google.com
     ```
 
 *   **`trace <ana bilgisayar>`**: Belirtilen bir ana bilgisayara ICMP tabanlı bir traceroute (izleme yolu) yürütür. Bu komut, ham ICMP paketlerini göndermek ve almak için yükseltilmiş ayrıcalıklar (root/Yönetici) gerektirir. Paketlerin bir hedefe giderken izlediği yolu ve potansiyel darboğazları belirlemeye yardımcı olur, ara durak IP adreslerini gösterir.
@@ -42,6 +46,14 @@ NetAn şu anda aşağıdaki komutları desteklemektedir:
     ```bash
     ./netan dns google.com
     ./netan dns 8.8.8.8
+    ```
+
+*   **`arp_scan <arayuz_adi>`**: (Yalnızca Linux) ARP istekleri göndererek yerel ağdaki aktif cihazları tarar. Bu komut yükseltilmiş ayrıcalıklar (root) gerektirir.
+    ```bash
+    # Linux'ta (bir kez 'sudo setcap cap_net_raw+ep ./build/netan' çalıştırdıktan sonra):
+    ./netan arp_scan eth0 # eth0 yerine ağ arayüzünüzün adını yazın (örn. wlan0, enp0s3)
+    # Linux'ta (setcap kullanılmazsa veya tek çalıştırma için):
+    sudo ./netan arp_scan eth0
     ```
 
 ## Kaynaktan Derleme
@@ -91,9 +103,9 @@ NetAn, CMake'i derleme sistemi olarak kullanır ve bu da çeşitli platformlarda
 
     Bu, kaynak kodunu derleyecek ve `build` dizininde `netan` yürütülebilir dosyasını (Windows'ta `netan.exe`) oluşturacaktır.
 
-### Derleme Sonrası Kurulum (Yalnızca Linux için `trace` ve `mtr`)
+### Derleme Sonrası Kurulum (Yalnızca Linux için `ping`, `trace`, `mtr` ve `arp_scan`)
 
-Linux'ta `trace` ve `mtr` komutlarının her seferinde `sudo` kullanmadan çalışması için, `netan` yürütülebilir dosyasına `CAP_NET_RAW` yetkisi vermeniz gerekir. Bu, derlemeden sonra yalnızca bir kez yapılmalıdır:
+Linux'ta `ping`, `trace`, `mtr` ve `arp_scan` komutlarının her seferinde `sudo` kullanmadan çalışması için, `netan` yürütülebilir dosyasına `CAP_NET_RAW` yetkisi vermeniz gerekir. Bu, derlemeden sonra yalnızca bir kez yapılmalıdır:
 
 ```bash
 sudo setcap cap_net_raw+ep ./build/netan
@@ -114,6 +126,7 @@ Derlemeden sonra, yürütülebilir dosyayı `build` dizininden çalıştırabili
 ./netan trace google.com
 ./netan scan localhost 1 1024
 ./netan dns 1.1.1.1
+./netan arp_scan eth0
 ```
 
 ## Gelecek Geliştirmeler

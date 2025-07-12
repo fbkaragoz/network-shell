@@ -6,6 +6,7 @@
 #include "../modules/scanner.h"
 #include "../modules/dns.h"
 #include "../modules/mtr.h"
+#include "../modules/arp_scan.h"
 
 int main(int argc, char *argv[]) {
     if (netan_init() != 0) {
@@ -29,6 +30,8 @@ int main(int argc, char *argv[]) {
         result = dns_main(argc - 1, argv + 1);
     } else if (strcmp(argv[1], "mtr") == 0) {
         result = mtr_main(argc - 1, argv + 1);
+    } else if (strcmp(argv[1], "arp_scan") == 0) {
+        result = arp_scan_main(argc - 1, argv + 1);
     } else {
         fprintf(stderr, "Unknown command: %s\n", argv[1]);
         result = 1;

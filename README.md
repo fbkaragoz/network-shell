@@ -6,10 +6,14 @@ NetAn is a command-line network analysis tool designed to provide essential netw
 
 NetAn currently supports the following commands:
 
-*   **`ping <host> [port]`**: Performs a TCP-based latency check to a specified host and port (defaults to 80). This is useful for measuring network responsiveness without requiring special privileges.
+*   **`ping <host>`**: Performs an ICMP-based ping to a specified host, providing detailed statistics including latency (min/avg/max), packet loss, and jitter. This command requires elevated privileges (root/Administrator).
     ```bash
+    # On Linux (after running 'sudo setcap cap_net_raw+ep ./build/netan' once):
     ./netan ping google.com
-    ./netan ping example.com 443
+    # On Linux (if setcap is not used or for a single run):
+    sudo ./netan ping google.com
+    # On Windows (Run Command Prompt/PowerShell as Administrator):
+    .\netan.exe ping google.com
     ```
 
 *   **`trace <host>`**: Executes an ICMP-based traceroute to a specified host. This command requires elevated privileges (root/Administrator) to send and receive raw ICMP packets. It helps in identifying the path packets take to a destination and potential bottlenecks, showing intermediate hop IP addresses.
@@ -42,6 +46,14 @@ NetAn currently supports the following commands:
     ```bash
     ./netan dns google.com
     ./netan dns 8.8.8.8
+    ```
+
+*   **`arp_scan <interface_name>`**: (Linux Only) Scans the local network for active devices by sending ARP requests. This command requires elevated privileges (root).
+    ```bash
+    # On Linux (after running 'sudo setcap cap_net_raw+ep ./build/netan' once):
+    ./netan arp_scan eth0 # Replace eth0 with your network interface name (e.g., wlan0, enp0s3)
+    # On Linux (if setcap is not used or for a single run):
+    sudo ./netan arp_scan eth0
     ```
 
 ## Building from Source
@@ -91,9 +103,9 @@ NetAn uses CMake as its build system, making it easy to compile on various platf
 
     This will compile the source code and create the `netan` executable (or `netan.exe` on Windows) in the `build` directory.
 
-### Post-Build Setup (Linux only for `trace` and `mtr`)
+### Post-Build Setup (Linux only for `ping`, `trace` and `mtr`, `arp_scan`)
 
-For `trace` and `mtr` commands to work without `sudo` every time on Linux, you need to grant the `netan` executable the `CAP_NET_RAW` capability. This needs to be done only once after building:
+For `ping`, `trace`, `mtr`, and `arp_scan` commands to work without `sudo` every time on Linux, you need to grant the `netan` executable the `CAP_NET_RAW` capability. This needs to be done only once after building:
 
 ```bash
 sudo setcap cap_net_raw+ep ./build/netan
@@ -110,10 +122,11 @@ After building, you can run the executable from the `build` directory:
 For example:
 
 ```bash
-./netan ping example.com
-./netan trace google.com
+./build/netan ping example.com
+./build/netan trace google.com
 ./netan scan localhost 1 1024
 ./netan dns 1.1.1.1
+./netan arp_scan eth0
 ```
 
 ## Future Enhancements
