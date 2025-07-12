@@ -12,6 +12,9 @@
     #include <netdb.h>
     #include <unistd.h>
     #include <fcntl.h>
+    #include <sys/time.h>
+    #include <netinet/ip.h>
+    #include <netinet/ip_icmp.h>
 #endif
 
 #include <stdio.h>
@@ -44,6 +47,35 @@ static inline int netan_close(int sockfd) {
 #else
     return close(sockfd);
 #endif
+}
+
+// Function to get current time in milliseconds
+static inline long long get_time_ms() {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (long long)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+}
+
+// ICMP checksum function
+static inline unsigned short in_cksum(unsigned short *addr, int len) {
+    int sum = 0;
+    unsigned short *w = addr;
+    unsigned short answer = 0;
+
+    while (len > 1) {
+        sum += *w++;
+        len -= 2;
+    }
+
+    if (len == 1) {
+        *(unsigned char *)&answer = *(unsigned char *)w;
+        sum += answer;
+    }
+
+    sum = (sum >> 16) + (sum & 0xffff);
+    sum += (sum >> 16);
+    answer = ~sum;
+    return answer;
 }
 
 #endif // NETAN_CORE_H

@@ -12,10 +12,24 @@ NetAn şu anda aşağıdaki komutları desteklemektedir:
     ./netan ping ornek.com 443
     ```
 
-*   **`trace <ana bilgisayar> [port]`**: Belirtilen bir ana bilgisayar ve porta (varsayılan olarak 80) TCP tabanlı bir traceroute (izleme yolu) yürütür. Bu, paketlerin bir hedefe giderken izlediği yolu ve potansiyel darboğazları belirlemeye yardımcı olur, hatta ICMP'nin engellendiği ortamlarda bile.
+*   **`trace <ana bilgisayar>`**: Belirtilen bir ana bilgisayara ICMP tabanlı bir traceroute (izleme yolu) yürütür. Bu komut, ham ICMP paketlerini göndermek ve almak için yükseltilmiş ayrıcalıklar (root/Yönetici) gerektirir. Paketlerin bir hedefe giderken izlediği yolu ve potansiyel darboğazları belirlemeye yardımcı olur, ara durak IP adreslerini gösterir.
     ```bash
+    # Linux'ta (bir kez 'sudo setcap cap_net_raw+ep ./build/netan' çalıştırdıktan sonra):
     ./netan trace google.com
-    ./netan trace ornek.com 443
+    # Linux'ta (setcap kullanılmazsa veya tek çalıştırma için):
+    sudo ./netan trace google.com
+    # Windows'ta (Komut İstemi/PowerShell'i Yönetici olarak çalıştırın):
+    .\netan.exe trace google.com
+    ```
+
+*   **`mtr <ana bilgisayar> [--interval <ms>] [--count <sayi>]`**: Belirtilen bir ana bilgisayara ICMP tabanlı bir MTR (My Traceroute) yapar, her durak için sürekli gecikme ve paket kaybı istatistikleri sağlar. Bu komut da yükseltilmiş ayrıcalıklar (root/Yönetici) gerektirir. Aralıklı ağ sorunlarını teşhis etmek için çok değerlidir.
+    ```bash
+    # Linux'ta (bir kez 'sudo setcap cap_net_raw+ep ./build/netan' çalıştırdıktan sonra):
+    ./netan mtr google.com
+    # Linux'ta (setcap kullanılmazsa veya tek çalıştırma için):
+    sudo ./netan mtr google.com --count 10
+    # Windows'ta (Komut İstemi/PowerShell'i Yönetici olarak çalıştırın):
+    .\netan.exe mtr google.com --interval 500
     ```
 
 *   **`scan <ana bilgisayar> <baslangic_portu> [bitis_portu]`**: Belirli bir port aralığı için verilen bir ana bilgisayarda TCP bağlantı noktası taraması yapar. Uzak bir makinedeki açık portları kontrol etmek için kullanışlıdır.
@@ -46,7 +60,7 @@ NetAn, CMake'i derleme sistemi olarak kullanır ve bu da çeşitli platformlarda
 
 1.  **Depoyu klonlayın (daha önce yapmadıysanız):**
     ```bash
-    git clone https://github.com/fbkaragoz/network-shell.git
+    git clone https://github.com/fbkaragoz/network-shell.git # Gerçek depo URL'si ile değiştirin
     cd network-shell
     ```
 
@@ -77,6 +91,14 @@ NetAn, CMake'i derleme sistemi olarak kullanır ve bu da çeşitli platformlarda
 
     Bu, kaynak kodunu derleyecek ve `build` dizininde `netan` yürütülebilir dosyasını (Windows'ta `netan.exe`) oluşturacaktır.
 
+### Derleme Sonrası Kurulum (Yalnızca Linux için `trace` ve `mtr`)
+
+Linux'ta `trace` ve `mtr` komutlarının her seferinde `sudo` kullanmadan çalışması için, `netan` yürütülebilir dosyasına `CAP_NET_RAW` yetkisi vermeniz gerekir. Bu, derlemeden sonra yalnızca bir kez yapılmalıdır:
+
+```bash
+sudo setcap cap_net_raw+ep ./build/netan
+```
+
 ## Kullanım
 
 Derlemeden sonra, yürütülebilir dosyayı `build` dizininden çalıştırabilirsiniz:
@@ -89,14 +111,13 @@ Derlemeden sonra, yürütülebilir dosyayı `build` dizininden çalıştırabili
 
 ```bash
 ./build/netan ping ornek.com
-./build/netan trace google.com 443
-./build/netan scan localhost 1 1024
-./build/netan dns 1.1.1.1
+./netan trace google.com
+./netan scan localhost 1 1024
+./netan dns 1.1.1.1
 ```
 
 ## Gelecek Geliştirmeler
 
-*   MTR benzeri sürekli traceroute
 *   Verim/iperf istemcisi
 *   Bufferbloat testi
 *   QoS/DSCP okuma/yazma

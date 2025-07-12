@@ -12,10 +12,24 @@ NetAn currently supports the following commands:
     ./netan ping example.com 443
     ```
 
-*   **`trace <host> [port]`**: Executes a TCP-based traceroute to a specified host and port (defaults to 80). This helps in identifying the path packets take to a destination and potential bottlenecks, even in environments where ICMP is blocked.
+*   **`trace <host>`**: Executes an ICMP-based traceroute to a specified host. This command requires elevated privileges (root/Administrator) to send and receive raw ICMP packets. It helps in identifying the path packets take to a destination and potential bottlenecks, showing intermediate hop IP addresses.
     ```bash
+    # On Linux (after running 'sudo setcap cap_net_raw+ep ./build/netan' once):
     ./netan trace google.com
-    ./netan trace example.com 443
+    # On Linux (if setcap is not used or for a single run):
+    sudo ./netan trace google.com
+    # On Windows (Run Command Prompt/PowerShell as Administrator):
+    .\netan.exe trace google.com
+    ```
+
+*   **`mtr <host> [--interval <ms>] [--count <num>]`**: Performs an ICMP-based MTR (My Traceroute) to a specified host, providing continuous latency and packet loss statistics for each hop. This command also requires elevated privileges (root/Administrator). It's invaluable for diagnosing intermittent network issues.
+    ```bash
+    # On Linux (after running 'sudo setcap cap_net_raw+ep ./build/netan' once):
+    ./netan mtr google.com
+    # On Linux (if setcap is not used or for a single run):
+    sudo ./netan mtr google.com --count 10
+    # On Windows (Run Command Prompt/PowerShell as Administrator):
+    .\netan.exe mtr google.com --interval 500
     ```
 
 *   **`scan <host> <start_port> [end_port]`**: Performs a TCP connect port scan on a given host for a specified range of ports. Useful for checking open ports on a remote machine.
@@ -46,8 +60,8 @@ NetAn uses CMake as its build system, making it easy to compile on various platf
 
 1.  **Clone the repository (if you haven't already):**
     ```bash
-    git clone https://github.com/your-repo/netan.git # Replace with actual repo URL
-    cd netan
+    git clone https://github.com/fbkaragoz/network-shell.git # Replace with actual repo URL
+    cd network-shell
     ```
 
 2.  **Create a build directory and navigate into it:**
@@ -77,6 +91,14 @@ NetAn uses CMake as its build system, making it easy to compile on various platf
 
     This will compile the source code and create the `netan` executable (or `netan.exe` on Windows) in the `build` directory.
 
+### Post-Build Setup (Linux only for `trace` and `mtr`)
+
+For `trace` and `mtr` commands to work without `sudo` every time on Linux, you need to grant the `netan` executable the `CAP_NET_RAW` capability. This needs to be done only once after building:
+
+```bash
+sudo setcap cap_net_raw+ep ./build/netan
+```
+
 ## Usage
 
 After building, you can run the executable from the `build` directory:
@@ -88,15 +110,14 @@ After building, you can run the executable from the `build` directory:
 For example:
 
 ```bash
-./build/netan ping example.com
-./build/netan trace google.com 443
-./build/netan scan localhost 1 1024
-./build/netan dns 1.1.1.1
+./netan ping example.com
+./netan trace google.com
+./netan scan localhost 1 1024
+./netan dns 1.1.1.1
 ```
 
 ## Future Enhancements
 
-*   MTR-like continuous traceroute
 *   Throughput/iperf client
 *   Bufferbloat testing
 *   QoS/DSCP reading/writing

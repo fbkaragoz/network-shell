@@ -3,108 +3,123 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <sys/time.h>
+#include <netinet/ip.h>
+#include <netinet/ip_icmp.h>
 
 #define MAX_HOPS 30
 #define TIMEOUT_SEC 1
-
-// Function to get current time in milliseconds
-long long get_time_ms_traceroute() {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (long long)tv.tv_sec * 1000 + tv.tv_usec / 1000;
-}
+#define PACKET_SIZE 64
 
 int traceroute_main(int argc, char *argv[]) {
     if (argc < 2) {
-        fprintf(stderr, "Usage: trace <host> [port]\n");
+        fprintf(stderr, "Usage: trace <host>\n");
         return 1;
     }
 
     const char *dest_host = argv[1];
-    const int port = (argc > 2) ? atoi(argv[2]) : 80; // Default to port 80
+    struct hostent *host_info;
+    struct sockaddr_in dest_addr, recv_addr;
+    socklen_t recv_addr_len = sizeof(recv_addr);
 
-    struct hostent *host;
-    struct sockaddr_in dest_addr;
-
-    if ((host = gethostbyname(dest_host)) == NULL) {
+    if ((host_info = gethostbyname(dest_host)) == NULL) {
         fprintf(stderr, "Cannot resolve host: %s\n", dest_host);
         return 1;
     }
 
     dest_addr.sin_family = AF_INET;
-    dest_addr.sin_port = htons(port);
-    dest_addr.sin_addr = *((struct in_addr *)host->h_addr);
+    dest_addr.sin_port = 0; // Not used for raw sockets
+    dest_addr.sin_addr = *((struct in_addr *)host_info->h_addr);
 
-    printf("TCP-based traceroute to %s (%s) on port %d, %d hops max\n",
-           dest_host, inet_ntoa(dest_addr.sin_addr), port, MAX_HOPS);
+    int send_sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+    int recv_sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+
+    if (send_sockfd < 0 || recv_sockfd < 0) {
+        perror("socket (requires root/admin privileges)");
+        return 1;
+    }
+
+    // Set receive timeout
+    struct timeval tv_recv = { .tv_sec = TIMEOUT_SEC, .tv_usec = 0 };
+    setsockopt(recv_sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv_recv, sizeof tv_recv);
+
+    printf("Traceroute to %s (%s), %d hops max\n", dest_host, inet_ntoa(dest_addr.sin_addr), MAX_HOPS);
+
+    char send_packet[PACKET_SIZE];
+    char recv_buffer[PACKET_SIZE * 2]; // Buffer for IP header + ICMP
 
     for (int ttl = 1; ttl <= MAX_HOPS; ttl++) {
-        int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-        if (sockfd < 0) {
-            perror("socket");
+        // Set TTL for outgoing packet
+        if (setsockopt(send_sockfd, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl)) < 0) {
+            perror("setsockopt TTL");
+            netan_close(send_sockfd);
+            netan_close(recv_sockfd);
             return 1;
         }
 
-        // Set TTL
-        if (setsockopt(sockfd, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl)) < 0) {
-            perror("setsockopt TTL");
-            netan_close(sockfd);
-            break;
+        // Construct ICMP ECHO request
+        struct icmphdr *icmp_hdr = (struct icmphdr *)send_packet;
+        icmp_hdr->type = ICMP_ECHO;
+        icmp_hdr->code = 0;
+        icmp_hdr->checksum = 0;
+        icmp_hdr->un.echo.id = getpid();
+        icmp_hdr->un.echo.sequence = ttl; // Use TTL as sequence for simplicity
+        icmp_hdr->checksum = in_cksum((unsigned short *)send_packet, PACKET_SIZE);
+
+        long long start_time = get_time_ms();
+
+        // Send packet
+        if (sendto(send_sockfd, send_packet, PACKET_SIZE, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr)) <= 0) {
+            perror("sendto");
+            netan_close(send_sockfd);
+            netan_close(recv_sockfd);
+            return 1;
         }
-
-        // Set non-blocking
-#ifdef _WIN32
-        u_long mode = 1; // 1 to enable non-blocking mode
-        ioctlsocket(sockfd, FIONBIO, &mode);
-#else
-        fcntl(sockfd, F_SETFL, O_NONBLOCK);
-#endif
-
-        long long start_time = get_time_ms_traceroute();
-        int res = connect(sockfd, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
 
         printf("%2d: ", ttl);
         fflush(stdout);
 
-        if (res < 0 && errno != EINPROGRESS) {
-            printf("* (connect error: %s)\n", strerror(errno));
-            netan_close(sockfd);
-            continue;
-        }
+        int bytes_recv = recvfrom(recv_sockfd, recv_buffer, sizeof(recv_buffer), 0, (struct sockaddr *)&recv_addr, &recv_addr_len);
 
-        fd_set fdset;
-        struct timeval tv;
-        FD_ZERO(&fdset);
-        FD_SET(sockfd, &fdset);
-        tv.tv_sec = TIMEOUT_SEC;
-        tv.tv_usec = 0;
-
-        res = select(sockfd + 1, NULL, &fdset, NULL, &tv);
-
-        if (res <= 0) { // Timeout or error
-            printf("* (timeout)\n");
+        if (bytes_recv < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                printf("* (timeout)\n");
+            } else {
+                perror("recvfrom");
+            }
         } else {
-            int so_error;
-            socklen_t len = sizeof(so_error);
-            getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &so_error, &len);
+            struct iphdr *ip_hdr = (struct iphdr *)recv_buffer;
+            struct icmphdr *recv_icmp_hdr = (struct icmphdr *)(recv_buffer + (ip_hdr->ihl * 4));
 
-            long long end_time = get_time_ms_traceroute();
+            char ip_str[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &(recv_addr.sin_addr), ip_str, sizeof(ip_str));
+
+            long long end_time = get_time_ms();
             long long rtt = end_time - start_time;
 
-            if (so_error == 0 || so_error == ECONNREFUSED) {
-                printf("%s:%d reached in %lld ms\n", inet_ntoa(dest_addr.sin_addr), port, rtt);
-                netan_close(sockfd);
-                return 0; // Destination reached
+            // Try to resolve hostname
+            char hostname[NI_MAXHOST];
+            struct sockaddr_in temp_addr;
+            memset(&temp_addr, 0, sizeof(temp_addr));
+            temp_addr.sin_family = AF_INET;
+            temp_addr.sin_addr = recv_addr.sin_addr;
+
+            if (getnameinfo((struct sockaddr *)&temp_addr, sizeof(temp_addr), hostname, sizeof(hostname), NULL, 0, NI_NAMEREQD) == 0) {
+                printf("%s (%s) %lld ms\n", hostname, ip_str, rtt);
             } else {
-                 // This is an intermediate hop. We can't get its IP without raw sockets,
-                 // but we know we haven't timed out.
-                 printf("* (%lld ms)\n", rtt);
+                printf("%s %lld ms\n", ip_str, rtt);
+            }
+
+            if (recv_icmp_hdr->type == ICMP_ECHOREPLY) {
+                printf("Traceroute complete.\n");
+                netan_close(send_sockfd);
+                netan_close(recv_sockfd);
+                return 0;
             }
         }
-        netan_close(sockfd);
     }
 
+    netan_close(send_sockfd);
+    netan_close(recv_sockfd);
     return 0;
 }
